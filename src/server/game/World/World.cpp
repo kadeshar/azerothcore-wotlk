@@ -169,6 +169,12 @@ void World::LoadConfigSettings(bool reload)
 {
     if (reload)
     {
+        LOG_ERROR("server.loading", "Reloading in ASP is forbidden because Auctionator workaround.");
+        return;
+    }
+
+    if (reload)
+    {
         if (!sConfigMgr->Reload())
         {
             LOG_ERROR("server.loading", "World settings reload fail: can't read settings.");
@@ -559,13 +565,13 @@ void World::LoadConfigSettings(bool reload)
         _int_configs[CONFIG_SKIP_CINEMATICS] = 0;
     }
 
-    if (reload)
-    {
-        uint32 val = sConfigMgr->GetOption<int32>("MaxPlayerLevel", DEFAULT_MAX_LEVEL);
-        if (val != _int_configs[CONFIG_MAX_PLAYER_LEVEL])
-            LOG_ERROR("server.loading", "MaxPlayerLevel option can't be changed at config reload, using current value ({}).", _int_configs[CONFIG_MAX_PLAYER_LEVEL]);
-    }
-    else
+    //if (reload)
+    //{
+    //    uint32 val = sConfigMgr->GetOption<int32>("MaxPlayerLevel", DEFAULT_MAX_LEVEL);
+    //    if (val != _int_configs[CONFIG_MAX_PLAYER_LEVEL])
+    //        LOG_ERROR("server.loading", "MaxPlayerLevel option can't be changed at config reload, using current value ({}).", _int_configs[CONFIG_MAX_PLAYER_LEVEL]);
+    //}
+    //else
         _int_configs[CONFIG_MAX_PLAYER_LEVEL] = sConfigMgr->GetOption<int32>("MaxPlayerLevel", DEFAULT_MAX_LEVEL);
 
     if (_int_configs[CONFIG_MAX_PLAYER_LEVEL] > MAX_LEVEL || _int_configs[CONFIG_MAX_PLAYER_LEVEL] < 1)
@@ -774,13 +780,13 @@ void World::LoadConfigSettings(bool reload)
 
     _bool_configs[CONFIG_ALWAYS_MAX_SKILL_FOR_LEVEL] = sConfigMgr->GetOption<bool>("AlwaysMaxSkillForLevel", false);
 
-    if (reload)
-    {
-        uint32 val = sConfigMgr->GetOption<int32>("Expansion", 2);
-        if (val != _int_configs[CONFIG_EXPANSION])
-            LOG_ERROR("server.loading", "Expansion option can't be changed at worldserver.conf reload, using current value ({}).", _int_configs[CONFIG_EXPANSION]);
-    }
-    else
+    //if (reload)
+    //{
+    //    uint32 val = sConfigMgr->GetOption<int32>("Expansion", 2);
+    //    if (val != _int_configs[CONFIG_EXPANSION])
+    //        LOG_ERROR("server.loading", "Expansion option can't be changed at worldserver.conf reload, using current value ({}).", _int_configs[CONFIG_EXPANSION]);
+    //}
+    //else
         _int_configs[CONFIG_EXPANSION] = sConfigMgr->GetOption<int32>("Expansion", 2);
 
     _int_configs[CONFIG_CHATFLOOD_MESSAGE_COUNT]    = sConfigMgr->GetOption<int32>("ChatFlood.MessageCount", 10);
