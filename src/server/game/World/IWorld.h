@@ -550,7 +550,7 @@ public:
     [[nodiscard]] virtual Seconds GetNextRandomBGResetTime() const = 0;
     [[nodiscard]] virtual uint16 GetConfigMaxSkillValue() const = 0;
     virtual void SetInitialWorldSettings() = 0;
-    virtual void LoadConfigSettings(bool reload = false) = 0;
+    virtual void LoadConfigSettings(bool reload = false, bool auctioneerWorkaround = false) = 0;
     [[nodiscard]] virtual bool IsShuttingDown() const = 0;
     [[nodiscard]] virtual uint32 GetShutDownTimeLeft() const = 0;
     virtual void ShutdownServ(uint32 time, uint32 options, uint8 exitcode, const std::string& reason = std::string()) = 0;
