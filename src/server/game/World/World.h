@@ -195,7 +195,7 @@ public:
     }
 
     void SetInitialWorldSettings() override;
-    void LoadConfigSettings(bool reload = false, bool auctioneerWorkaround = false) override;
+    void LoadConfigSettings(bool reload = false) override;
 
     /// Are we in the middle of a shutdown?
     [[nodiscard]] bool IsShuttingDown() const override { return _shutdownTimer > 0; }

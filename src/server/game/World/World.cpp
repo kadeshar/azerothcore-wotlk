@@ -165,7 +165,7 @@ void World::SetClosed(bool val)
 }
 
 /// Initialize config values
-void World::LoadConfigSettings(bool reload, bool auctioneerWorkaround)
+void World::LoadConfigSettings(bool reload)
 {
     if (reload)
     {
@@ -559,7 +559,7 @@ void World::LoadConfigSettings(bool reload, bool auctioneerWorkaround)
         _int_configs[CONFIG_SKIP_CINEMATICS] = 0;
     }
 
-    if (reload && !auctioneerWorkaround)
+    if (reload)
     {
         uint32 val = sConfigMgr->GetOption<int32>("MaxPlayerLevel", DEFAULT_MAX_LEVEL);
         if (val != _int_configs[CONFIG_MAX_PLAYER_LEVEL])
@@ -774,7 +774,7 @@ void World::LoadConfigSettings(bool reload, bool auctioneerWorkaround)
 
     _bool_configs[CONFIG_ALWAYS_MAX_SKILL_FOR_LEVEL] = sConfigMgr->GetOption<bool>("AlwaysMaxSkillForLevel", false);
 
-    if (reload && !auctioneerWorkaround)
+    if (reload)
     {
         uint32 val = sConfigMgr->GetOption<int32>("Expansion", 2);
         if (val != _int_configs[CONFIG_EXPANSION])
