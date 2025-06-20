@@ -1322,7 +1322,8 @@ public:
                         events.ScheduleEvent(EVENT_REINSTALL_ROCKETS, 3s);
                         events.ScheduleEvent(EVENT_SPELL_ROCKET_STRIKE, 16s);
                         events.ScheduleEvent(EVENT_HAND_PULSE, 1ms);
-                        events.ScheduleEvent(EVENT_SPELL_SPINNING_UP, 30s);
+                        //commented because bug https://github.com/azerothcore/azerothcore-wotlk/issues/8259
+                        //events.ScheduleEvent(EVENT_SPELL_SPINNING_UP, 30s);
                         if (Creature* c = GetMimiron())
                             if (c->AI()->GetData(1))
                                 events.ScheduleEvent(EVENT_FROST_BOMB, 1s);
@@ -1493,17 +1494,17 @@ public:
                     events.Repeat(45s);
                     if (Player* p = SelectTargetFromPlayerList(80.0f))
                     {
-                        float angle = me->GetAngle(p);
+                            float angle = me->GetAngle(p);
 
-                        spinningUpOrientation = (uint32)((angle * 100.0f) / (2 * M_PI));
-                        spinningUpTimer = 1500;
-                        me->SetFacingTo(angle);
-                        me->CastSpell(p, SPELL_SPINNING_UP, true);
-                        if (Unit* vehicle = me->GetVehicleBase())
-                        {
-                            vehicle->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_CUSTOM_SPELL_01);
-                            vehicle->HandleEmoteCommand(EMOTE_STATE_CUSTOM_SPELL_01);
-                        }
+                            spinningUpOrientation = (uint32)((angle * 100.0f) / (2 * M_PI));
+                            spinningUpTimer = 1500;
+                            me->SetFacingTo(angle);
+                            me->CastSpell(p, SPELL_SPINNING_UP, true);
+                            if (Unit* vehicle = me->GetVehicleBase())
+                            {
+                                vehicle->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_CUSTOM_SPELL_01);
+                                vehicle->HandleEmoteCommand(EMOTE_STATE_CUSTOM_SPELL_01);
+                            }
                         events.RescheduleEvent((Phase == 2 ? EVENT_SPELL_RAPID_BURST : EVENT_HAND_PULSE), 14s + 500ms);
                     }
                     break;
@@ -1630,7 +1631,8 @@ public:
                         events.ScheduleEvent(EVENT_SPELL_PLASMA_BALL, 0ms);
                         events.ScheduleEvent(EVENT_SUMMON_BOMB_BOT, 15s);
                         events.ScheduleEvent(EVENT_SUMMON_ASSAULT_BOT, 1s);
-                        events.ScheduleEvent(EVENT_SUMMON_JUNK_BOT, 10s);
+                        //commented because bug https://github.com/azerothcore/azerothcore-wotlk/issues/15404
+                        //events.ScheduleEvent(EVENT_SUMMON_JUNK_BOT, 10s);
                         if (Creature* c = GetMimiron())
                             if (c->AI()->GetData(1))
                                 events.ScheduleEvent(EVENT_SUMMON_EMERGENCY_FIRE_BOTS, 0ms);
@@ -2168,10 +2170,10 @@ class spell_mimiron_p3wx2_laser_barrage_aura : public AuraScript
             _lastOrientation = new_o;
             caster->SetFacingTo(new_o);
 
-            caster->CastSpell((Unit*)nullptr, SPELL_P3WX2_LASER_BARRAGE_1, true);
-            caster->CastSpell((Unit*)nullptr, SPELL_P3WX2_LASER_BARRAGE_2, true);
+                caster->CastSpell((Unit*)nullptr, SPELL_P3WX2_LASER_BARRAGE_1, true);
+                caster->CastSpell((Unit*)nullptr, SPELL_P3WX2_LASER_BARRAGE_2, true);
+            }
         }
-    }
 
     void Register() override
     {
