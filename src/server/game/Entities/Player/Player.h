@@ -1080,11 +1080,6 @@ public:
         SetFloatValue(UNIT_FIELD_COMBATREACH, scale * DEFAULT_COMBAT_REACH);
     }
 
-    [[nodiscard]] bool hasSpanishClient()
-    {
-        return GetSession()->GetSessionDbLocaleIndex() == LOCALE_esES || GetSession()->GetSessionDbLocaleIndex() == LOCALE_esMX;
-    }
-
     bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, Unit* target = nullptr, bool newInstance = false);
     bool TeleportTo(WorldLocation const& loc, uint32 options = 0, Unit* target = nullptr)
     {
@@ -1295,6 +1290,7 @@ public:
     InventoryResult CanUseItem(Item* pItem, bool not_loading = true) const;
     [[nodiscard]] bool HasItemTotemCategory(uint32 TotemCategory) const;
     bool IsTotemCategoryCompatiableWith(ItemTemplate const* pProto, uint32 requiredTotemCategoryId) const;
+    InventoryResult BotCanUseItem(ItemTemplate const* pItem) const;
     InventoryResult CanUseItem(ItemTemplate const* pItem) const;
     [[nodiscard]] InventoryResult CanUseAmmo(uint32 item) const;
     InventoryResult CanRollForItemInLFG(ItemTemplate const* item, WorldObject const* lootedObject) const;
@@ -1329,7 +1325,6 @@ public:
     {
         return StoreItem(dest, pItem, update);
     }
-    Item* BankItem(uint16 pos, Item* pItem, bool update);
     void RemoveItem(uint8 bag, uint8 slot, bool update, bool swap = false);
     void MoveItemFromInventory(uint8 bag, uint8 slot, bool update);
     // in trade, auction, guild bank, mail....
@@ -1590,7 +1585,6 @@ public:
     void SetBindPoint(ObjectGuid guid);
     void SendTalentWipeConfirm(ObjectGuid guid);
     void ResetPetTalents();
-    void CalcRage(uint32 damage, bool attacker);
     void RegenerateAll();
     void Regenerate(Powers power);
     void RegenerateHealth();
