@@ -643,6 +643,8 @@ Spell::Spell(Unit* caster, SpellInfo const* info, TriggerCastFlags triggerFlags,
     gameObjTarget = nullptr;
     destTarget = nullptr;
     damage = 0;
+    m_reflectionTarget = nullptr;
+    m_reflectionTargetGuid.Clear();
     effectHandleMode = SPELL_EFFECT_HANDLE_LAUNCH;
     m_diminishLevel = DIMINISHING_LEVEL_1;
     m_diminishGroup = DIMINISHING_NONE;
@@ -2392,7 +2394,7 @@ void Spell::AddUnitTarget(Unit* target, uint32 effectMask, bool checkIfValid /*=
             targetInfo.reflectResult = SPELL_MISS_PARRY;
 
         // Increase time interval for reflected spells by 1.5
-        m_caster->m_Events.AddEvent(new ReflectEvent(m_caster, targetInfo.targetGUID, m_spellInfo), m_caster->m_Events.CalculateTime(targetInfo.timeDelay));
+        m_caster->m_Events.AddEventAtOffset(new ReflectEvent(m_caster, targetInfo.targetGUID, m_spellInfo), Milliseconds(targetInfo.timeDelay));
         targetInfo.timeDelay += targetInfo.timeDelay >> 1;
 
         m_spellFlags |= SPELL_FLAG_REFLECTED;
@@ -2591,6 +2593,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
     //Spells with this flag cannot trigger if effect is casted on self
     bool canEffectTrigger = !m_spellInfo->HasAttribute(SPELL_ATTR3_SUPPRESS_CASTER_PROCS) && unitTarget->CanProc() && (CanExecuteTriggersOnHit(mask) || missInfo == SPELL_MISS_IMMUNE2);
     bool reflectedSpell = missInfo == SPELL_MISS_REFLECT;
+    Unit* reflectionSource = nullptr;
     Unit* spellHitTarget = nullptr;
 
     if (missInfo == SPELL_MISS_NONE)                          // In case spell hit target, do all effect on that target
@@ -2602,6 +2605,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         {
             spellHitTarget = m_caster;
             unitTarget = m_caster;
+            reflectionSource = effectUnit;
             if (m_caster->IsCreature())
                 m_caster->ToCreature()->LowerPlayerDamageReq(target->damage);
         }
@@ -2609,7 +2613,24 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
 
     if (spellHitTarget)
     {
+        if (reflectionSource)
+        {
+            m_reflectionTarget = reflectionSource;
+            m_reflectionTargetGuid = reflectionSource->GetGUID();
+            m_reflectionTargetPosition.Relocate(reflectionSource);
+        }
+        else
+        {
+            m_reflectionTarget = nullptr;
+            m_reflectionTargetGuid.Clear();
+            m_reflectionTargetPosition = Position();
+        }
+
         SpellMissInfo missInfo2 = DoSpellHitOnUnit(spellHitTarget, mask, target->scaleAura);
+
+        m_reflectionTarget = nullptr;
+        m_reflectionTargetGuid.Clear();
+        m_reflectionTargetPosition = Position();
         if (missInfo2 != SPELL_MISS_NONE)
         {
             if (missInfo2 != SPELL_MISS_MISS)
@@ -3439,7 +3460,7 @@ SpellCastResult Spell::prepare(SpellCastTargets const* targets, AuraEffect const
 
     // create and add update event for this spell
     _spellEvent = new SpellEvent(this);
-    m_caster->m_Events.AddEvent(_spellEvent, m_caster->m_Events.CalculateTime(1));
+    m_caster->m_Events.AddEventAtOffset(_spellEvent, 1ms);
 
     if (sDisableMgr->IsDisabledFor(DISABLE_TYPE_SPELL, m_spellInfo->Id, m_caster))
     {
@@ -4612,7 +4633,7 @@ void Spell::SendCastResult(Player* caster, SpellInfo const* spellInfo, uint8 cas
     WorldPacket data(SMSG_CAST_FAILED, 1 + 4 + 1);
     WriteCastResultInfo(data, caster, spellInfo, castCount, result, customError);
 
-    caster->GetSession()->SendPacket(&data);
+    caster->SendDirectMessage(&data);
 }
 
 void Spell::SendCastResult(SpellCastResult result)
@@ -4649,7 +4670,7 @@ void Spell::SendPetCastResult(SpellCastResult result)
     WorldPacket data(SMSG_PET_CAST_FAILED, 1 + 4 + 1);
     WriteCastResultInfo(data, player, m_spellInfo, m_cast_count, result, m_customError);
 
-    player->GetSession()->SendPacket(&data);
+    player->SendDirectMessage(&data);
 }
 
 void Spell::SendSpellStart()
@@ -5184,7 +5205,7 @@ void Spell::SendResurrectRequest(Player* target)
     // override delay sent with SMSG_CORPSE_RECLAIM_DELAY, set instant resurrection for spells with this attribute
     if (m_spellInfo->HasAttribute(SPELL_ATTR3_NO_RES_TIMER))
         data << uint32(0);
-    target->GetSession()->SendPacket(&data);
+    target->SendDirectMessage(&data);
 }
 
 void Spell::TakeCastItem()
@@ -8166,7 +8187,7 @@ bool SpellEvent::IsDeletable() const
     return m_Spell->IsDeletable();
 }
 
-bool ReflectEvent::Execute(uint64  /*e_time*/, uint32  /*p_time*/)
+bool ReflectEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
 {
     Unit* target = ObjectAccessor::GetUnit(*_caster, _targetGUID);
     if (target && _caster->IsInMap(target))

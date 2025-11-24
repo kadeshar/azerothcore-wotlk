@@ -417,12 +417,12 @@ void Map::UpdatePlayerZoneStats(uint32 oldZone, uint32 newZone)
     if (oldZone != MAP_INVALID_ZONE)
     {
         uint32& oldZoneCount = _zonePlayerCountMap[oldZone];
-        if (!oldZoneCount)
-            LOG_ERROR("maps", "A player left zone {} (went to {}) - but there were no players in the zone!", oldZone, newZone);
-        else
+        if (oldZoneCount)
             --oldZoneCount;
     }
-    ++_zonePlayerCountMap[newZone];
+
+    if (newZone != MAP_INVALID_ZONE)
+        ++_zonePlayerCountMap[newZone];
 }
 
 void Map::Update(const uint32 t_diff, const uint32 s_diff, bool  /*thread*/)
@@ -696,8 +696,8 @@ struct ResetNotifier
 
 void Map::RemovePlayerFromMap(Player* player, bool remove)
 {
-    // Before leaving map, update zone/area for stats
-    player->UpdateZone(MAP_INVALID_ZONE, 0);
+    UpdatePlayerZoneStats(player->GetZoneId(), MAP_INVALID_ZONE);
+
     player->getHostileRefMgr().deleteReferences(true); // pussywizard: multithreading crashfix
 
     player->RemoveFromWorld();
@@ -725,8 +725,6 @@ void Map::RemoveFromMap(T* obj, bool remove)
     obj->RemoveFromWorld();
 
     obj->RemoveFromGrid();
-    if (obj->IsFarVisible())
-        RemoveWorldObjectFromFarVisibleMap(obj);
 
     obj->ResetMap();
 
@@ -1693,7 +1691,7 @@ void Map::SendInitTransports(Player* player)
 
     WorldPacket packet;
     transData.BuildPacket(packet);
-    player->GetSession()->SendPacket(&packet);
+    player->SendDirectMessage(&packet);
 }
 
 void Map::SendRemoveTransports(Player* player)
@@ -1712,7 +1710,7 @@ void Map::SendRemoveTransports(Player* player)
 
     WorldPacket packet;
     transData.BuildPacket(packet);
-    player->GetSession()->SendPacket(&packet);
+    player->SendDirectMessage(&packet);
 }
 
 void Map::SendObjectUpdates()
@@ -1738,7 +1736,7 @@ void Map::SendObjectUpdates()
         }
 
         iter->second.BuildPacket(packet);
-        iter->first->GetSession()->SendPacket(&packet);
+        iter->first->SendDirectMessage(&packet);
         packet.clear();                                     // clean the string
     }
 }
@@ -1858,7 +1856,7 @@ uint32 Map::GetPlayersCountExceptGMs() const
 void Map::SendToPlayers(WorldPacket const* data) const
 {
     for (MapRefMgr::const_iterator itr = m_mapRefMgr.begin(); itr != m_mapRefMgr.end(); ++itr)
-        itr->GetSource()->GetSession()->SendPacket(data);
+        itr->GetSource()->SendDirectMessage(data);
 }
 
 template bool Map::AddToMap(Corpse*, bool);
@@ -2063,7 +2061,7 @@ bool InstanceMap::AddPlayerToMap(Player* player)
             data << uint32(60000);
             data << uint32(instance_data ? instance_data->GetCompletedEncounterMask() : 0);
             data << uint8(0);
-            player->GetSession()->SendPacket(&data);
+            player->SendDirectMessage(&data);
             player->SetPendingBind(mapSave->GetInstanceId(), 60000);
         }
     }
@@ -2126,7 +2124,7 @@ void InstanceMap::CreateInstanceScript(bool load, std::string data, uint32 compl
     if (instance_data)
         isOtherAI = true;
 
-    // if Eluna AI was fetched succesfully we should not call CreateInstanceData nor set the unused scriptID
+    // if ALE AI was fetched succesfully we should not call CreateInstanceData nor set the unused scriptID
     if (!isOtherAI)
     {
         InstanceTemplate const* mInstance = sObjectMgr->GetInstanceTemplate(GetId());
@@ -2140,7 +2138,7 @@ void InstanceMap::CreateInstanceScript(bool load, std::string data, uint32 compl
     if (!instance_data)
         return;
 
-    // use mangos behavior if we are dealing with Eluna AI
+    // use mangos behavior if we are dealing with ALE AI
     // initialize should then be called only if load is false
     if (!isOtherAI || !load)
     {
@@ -2235,7 +2233,7 @@ void InstanceMap::PermBindAllPlayers()
         {
             WorldPacket data(SMSG_INSTANCE_SAVE_CREATED, 4);
             data << uint32(0);
-            player->GetSession()->SendPacket(&data);
+            player->SendDirectMessage(&data);
             sInstanceSaveMgr->PlayerBindToInstance(player->GetGUID(), save, true, player);
         }
 
@@ -2364,27 +2362,27 @@ void BattlegroundMap::RemoveAllPlayers()
                     player->TeleportTo(player->GetEntryPoint());
 }
 
-Corpse* Map::GetCorpse(ObjectGuid const guid)
+Corpse* Map::GetCorpse(ObjectGuid const& guid)
 {
     return _objectsStore.Find<Corpse>(guid);
 }
 
-Creature* Map::GetCreature(ObjectGuid const guid)
+Creature* Map::GetCreature(ObjectGuid const& guid)
 {
     return _objectsStore.Find<Creature>(guid);
 }
 
-GameObject* Map::GetGameObject(ObjectGuid const guid)
+GameObject* Map::GetGameObject(ObjectGuid const& guid)
 {
     return _objectsStore.Find<GameObject>(guid);
 }
 
-Pet* Map::GetPet(ObjectGuid const guid)
+Pet* Map::GetPet(ObjectGuid const& guid)
 {
     return dynamic_cast<Pet*>(_objectsStore.Find<Creature>(guid));
 }
 
-Transport* Map::GetTransport(ObjectGuid guid)
+Transport* Map::GetTransport(ObjectGuid const& guid)
 {
     if (guid.GetHigh() != HighGuid::Mo_Transport && guid.GetHigh() != HighGuid::Transport)
         return nullptr;
@@ -2393,7 +2391,7 @@ Transport* Map::GetTransport(ObjectGuid guid)
     return go ? go->ToTransport() : nullptr;
 }
 
-DynamicObject* Map::GetDynamicObject(ObjectGuid guid)
+DynamicObject* Map::GetDynamicObject(ObjectGuid const& guid)
 {
     return _objectsStore.Find<DynamicObject>(guid);
 }
@@ -2685,7 +2683,7 @@ void Map::RemoveCorpse(Corpse* corpse)
         _corpseBones.erase(corpse);
 }
 
-Corpse* Map::ConvertCorpseToBones(ObjectGuid const ownerGuid, bool insignia /*= false*/)
+Corpse* Map::ConvertCorpseToBones(ObjectGuid const& ownerGuid, bool insignia /*= false*/)
 {
     Corpse* corpse = GetCorpseByPlayer(ownerGuid);
     if (!corpse)
