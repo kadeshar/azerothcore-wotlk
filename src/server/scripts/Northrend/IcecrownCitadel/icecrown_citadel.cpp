@@ -791,6 +791,7 @@ public:
             }
         }
 
+        using CreatureAI::WaypointReached;
         void WaypointReached(uint32 waypointId) override
         {
             switch (waypointId)
@@ -1762,15 +1763,26 @@ public:
                 Position myPos = me->GetPosition();
                 me->NearTeleportTo(c->GetPositionX(), c->GetPositionY(), c->GetPositionZ(), c->GetOrientation());
                 c->NearTeleportTo(myPos.GetPositionX(), myPos.GetPositionY(), myPos.GetPositionZ(), myPos.GetOrientation());
-                const ThreatContainer::StorageType me_tl = me->GetThreatMgr().GetThreatList();
-                const ThreatContainer::StorageType target_tl = c->GetThreatMgr().GetThreatList();
+
+                // Store threat values before reset
+                std::vector<std::pair<Unit*, float>> myThreats;
+                std::vector<std::pair<Unit*, float>> targetThreats;
+
+                for (ThreatReference const* ref : me->GetThreatMgr().GetUnsortedThreatList())
+                    if (Unit* victim = ref->GetVictim())
+                        myThreats.push_back({victim, ref->GetThreat()});
+
+                for (ThreatReference const* ref : c->GetThreatMgr().GetUnsortedThreatList())
+                    if (Unit* victim = ref->GetVictim())
+                        targetThreats.push_back({victim, ref->GetThreat()});
+
                 DoResetThreatList();
-                for (ThreatContainer::StorageType::const_iterator iter = target_tl.begin(); iter != target_tl.end(); ++iter)
-                    me->GetThreatMgr().AddThreat((*iter)->getTarget(), (*iter)->GetThreat());
+                for (auto const& pair : targetThreats)
+                    me->GetThreatMgr().AddThreat(pair.first, pair.second);
 
                 c->GetThreatMgr().ResetAllThreat();
-                for (ThreatContainer::StorageType::const_iterator iter = me_tl.begin(); iter != me_tl.end(); ++iter)
-                    c->GetThreatMgr().AddThreat((*iter)->getTarget(), (*iter)->GetThreat());
+                for (auto const& pair : myThreats)
+                    c->GetThreatMgr().AddThreat(pair.first, pair.second);
             }
         }
 
@@ -2292,27 +2304,6 @@ class spell_icc_web_wrap_aura : public AuraScript
     void Register() override
     {
         OnEffectRemove += AuraEffectRemoveFn(spell_icc_web_wrap_aura::OnRemove, EFFECT_0, SPELL_AURA_MOD_ROOT, AURA_EFFECT_HANDLE_REAL);
-    }
-};
-
-class spell_icc_dark_reckoning_aura : public AuraScript
-{
-    PrepareAuraScript(spell_icc_dark_reckoning_aura);
-
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ 69482 });
-    }
-
-    void OnPeriodic(AuraEffect const* /*aurEff*/)
-    {
-        if (Unit* caster = GetCaster())
-            caster->CastSpell(GetTarget(), 69482, true);
-    }
-
-    void Register() override
-    {
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_icc_dark_reckoning_aura::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -3602,7 +3593,7 @@ public:
     bool OnTrigger(Player* player, AreaTrigger const* /*areaTrigger*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
-            if (instance->GetBossState(DATA_SINDRAGOSA_GAUNTLET) == NOT_STARTED && !player->IsGameMaster())
+            if (instance->GetBossState(DATA_SINDRAGOSA_GAUNTLET) == NOT_STARTED)
                 if (Creature* gauntlet = ObjectAccessor::GetCreature(*player, instance->GetGuidData(NPC_SINDRAGOSA_GAUNTLET)))
                     gauntlet->AI()->DoAction(ACTION_START_GAUNTLET);
         return true;
@@ -3617,7 +3608,7 @@ public:
     bool OnTrigger(Player* player, AreaTrigger const* /*areaTrigger*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
-            if (instance->GetData(DATA_PUTRICIDE_TRAP_STATE) == NOT_STARTED && !player->IsGameMaster())
+            if (instance->GetData(DATA_PUTRICIDE_TRAP_STATE) == NOT_STARTED)
                 if (Creature* trap = ObjectAccessor::GetCreature(*player, instance->GetGuidData(NPC_PUTRICADES_TRAP)))
                     trap->AI()->DoAction(ACTION_START_GAUNTLET);
         return true;
@@ -3681,7 +3672,6 @@ void AddSC_icecrown_citadel()
 
     // pussywizard below:
     RegisterSpellScript(spell_icc_web_wrap_aura);
-    RegisterSpellScript(spell_icc_dark_reckoning_aura);
     RegisterSpellScript(spell_stinky_precious_decimate);
     RegisterSpellScript(spell_icc_yf_frozen_orb_aura);
     RegisterSpellScript(spell_icc_yh_volley_aura);
