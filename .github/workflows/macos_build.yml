@@ -1,12 +1,17 @@
 name: macos-build
+
 on:
   push:
-    branches: [ "Playerbot" ]
+    branches:
+      - "Playerbot"
+      - "test-staging"
   pull_request:
-    branches: [ "Playerbot" ]
+    branches:
+      - "Playerbot"
+      - "test-staging"
 
 concurrency:
-  group: ${{ github.head_ref }} || concat(${{ github.ref_name }}, ${{ github.workflow }})
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,7 +28,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout AzerothCore
+        uses: actions/checkout@v4
+
+      - name: Checkout Playerbot Module
+        uses: actions/checkout@v4
+        with:
+          repository: mod-playerbots/mod-playerbots
+          ref: ${{ github.ref_name == 'Playerbot' && 'master' || 'test-staging' }}
+          path: modules/mod-playerbots
+
       - name: Cache
         uses: actions/cache@v4
         with:
@@ -32,15 +46,22 @@ jobs:
           restore-keys: |
             ccache:${{ matrix.os }}:${{ github.ref_name }}
             ccache:${{ matrix.os }}
+
       - name: reset ccache stats
         shell: bash
         run: ccache -z || true
+
       - name: Install latest bash
         run: brew install bash
+
       - name: Configure OS
+        shell: bash
         run: source ./acore.sh install-deps
+
       - name: Build
+        shell: bash
         run: source ./apps/ci/mac/ci-compile.sh
+
       - name: ccache stats
         shell: bash
         run: ccache -s || true
