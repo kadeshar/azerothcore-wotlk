@@ -110,6 +110,8 @@ void WorldSession::SendTrainerList(Creature* npc)
         return;
     }
 
+    npc->PauseMovementForInteraction();
+
     trainer->SendSpells(npc, _player, GetSessionDbLocaleIndex());
 }
 
@@ -165,9 +167,7 @@ void WorldSession::HandleGossipHelloOpcode(WorldPacket& recvData)
     //if (GetPlayer()->HasUnitState(UNIT_STATE_DIED))
     //    GetPlayer()->RemoveAurasByType(SPELL_AURA_FEIGN_DEATH);
 
-    // Stop the npc if moving
-    if (uint32 pause = unit->GetMovementTemplate().GetInteractionPauseTimer())
-        unit->PauseMovement(pause);
+    unit->PauseMovementForInteraction();
 
     // Update home position for patrolling NPCs only (prevents drift for stationary NPCs)
     if (unit->GetDefaultMovementType() == WAYPOINT_MOTION_TYPE ||
@@ -262,7 +262,9 @@ void WorldSession::SendSpiritResurrect()
 {
     _player->ResurrectPlayer(0.5f, true);
 
-    _player->DurabilityLossAll(0.25f, true);
+    float durabilityLossOnSpiritResurrect = sWorld->getRate(RATE_DURABILITY_LOSS_ON_SPIRIT_RESURRECT) / 100.0f;
+    if (durabilityLossOnSpiritResurrect)
+        _player->DurabilityLossAll(durabilityLossOnSpiritResurrect, true);
 
     // get corpse nearest graveyard
     GraveyardStruct const* corpseGrave = nullptr;

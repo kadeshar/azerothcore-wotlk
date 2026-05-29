@@ -173,7 +173,7 @@ public: /* SpellScriptLoader */
     void CreateSpellScriptLoaders(uint32 spellId, std::vector<std::pair<SpellScriptLoader*, std::multimap<uint32, uint32>::iterator>>& scriptVector);
 
 public: /* ServerScript */
-    void OnNetworkStart();
+    void OnNetworkStart(Acore::Asio::IoContext& ioContext);
     void OnNetworkStop();
     void OnSocketOpen(std::shared_ptr<WorldSocket> const& socket);
     void OnSocketClose(std::shared_ptr<WorldSocket> const& socket);
@@ -464,7 +464,7 @@ public: /* PlayerScript */
     bool OnPlayerCanSetTradeItem(Player* player, Item* tradedItem, uint8 tradeSlot);
     void OnPlayerSetServerSideVisibility(Player* player, ServerSideVisibilityType& type, AccountTypes& sec);
     void OnPlayerSetServerSideVisibilityDetect(Player* player, ServerSideVisibilityType& type, AccountTypes& sec);
-    void OnPlayerResurrect(Player* player, float restore_percent, bool applySickness);
+    void OnPlayerResurrect(Player* player, float restore_percent, bool& applySickness);
     void OnPlayerBeforeChooseGraveyard(Player* player, TeamId teamId, bool nearCorpse, uint32& graveyardOverride);
     bool OnPlayerCanUseChat(Player* player, uint32 type, uint32 language, std::string& msg);
     bool OnPlayerCanUseChat(Player* player, uint32 type, uint32 language, std::string& msg, Player* receiver);
@@ -475,6 +475,7 @@ public: /* PlayerScript */
     void OnPlayerEnterCombat(Player* player, Unit* enemy);
     void OnPlayerLeaveCombat(Player* player);
     void OnPlayerQuestAbandon(Player* player, uint32 questId);
+    void OnPlayerQuestAccept(Player* player, Quest const* quest);
     bool OnPlayerCanSendErrorAlreadyLooted(Player* player);
     void OnPlayerAfterCreatureLoot(Player* player);
     void OnPlayerAfterCreatureLootMoney(Player* player);
@@ -488,6 +489,7 @@ public: /* PlayerScript */
     void OnPlayerGetReputationPriceDiscount(Player const* player, Creature const* creature, float& discount);
     void OnPlayerGetReputationPriceDiscount(Player const* player, FactionTemplateEntry const* factionTemplate, float& discount);
     void OnPlayerLearnTaxiNode(Player const* player, uint32 nodeId);
+    void OnPlayerBeforeGetLevelForXPGain(Player const* player, uint8& level);
 
     // Anti cheat
     void AnticheatSetCanFlybyServer(Player* player, bool apply);
@@ -607,6 +609,8 @@ public: /* BattlefieldScript */
     void OnBattlefieldPlayerJoinWar(Battlefield* bf, Player* player);
     void OnBattlefieldPlayerLeaveWar(Battlefield* bf, Player* player);
     void OnBattlefieldBeforeInvitePlayerToWar(Battlefield* bf, Player* player);
+    void OnBattlefieldWarEnd(Battlefield* bf, bool endByTimer);
+    void OnBattlefieldPlayerKill(Battlefield* bf, Player* killer, Player* victim);
 
 public: /* BGScript */
     void OnBattlegroundStart(Battleground* bg);
