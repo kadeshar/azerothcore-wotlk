@@ -695,6 +695,12 @@ Spell::Spell(Unit* caster, SpellInfo const* info, TriggerCastFlags triggerFlags,
 
 Spell::~Spell()
 {
+    // FindMap() check: pending spell events are destroyed after the caster has left the map,
+    // where resolving a unit-summoned caster's owner through ObjectAccessor would assert
+    if (Player* modOwner = (m_caster && m_caster->FindMap()) ? m_caster->GetSpellModOwner() : nullptr)
+        if (modOwner->m_spellModTakingSpell == this)
+            modOwner->SetSpellModTakingSpell(this, false);
+
     // unload scripts
     while (!m_loadedScripts.empty())
     {
@@ -1150,7 +1156,11 @@ void Spell::SelectImplicitNearbyTargets(SpellEffIndex effIndex, SpellImplicitTar
                 if (m_spellInfo->RequiresSpellFocus)
                 {
                     if (focusObject)
-                        m_targets.SetDst(*focusObject);
+                    {
+                        SpellDestination dest(*focusObject);
+                        CallScriptDestinationTargetSelectHandlers(dest, effIndex, targetType);
+                        m_targets.SetDst(dest);
+                    }
                     return;
                 }
                 break;
@@ -1205,8 +1215,12 @@ void Spell::SelectImplicitNearbyTargets(SpellEffIndex effIndex, SpellImplicitTar
             }
             break;
         case TARGET_OBJECT_TYPE_DEST:
-            m_targets.SetDst(*target);
-            break;
+            {
+                SpellDestination dest(*target);
+                CallScriptDestinationTargetSelectHandlers(dest, effIndex, targetType);
+                m_targets.SetDst(dest);
+                break;
+            }
         default:
             ASSERT(false && "Spell::SelectImplicitNearbyTargets: received not implemented target object type");
             break;
@@ -2982,7 +2996,7 @@ SpellMissInfo Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, bool scaleA
         return SPELL_MISS_EVADE;
 
     // For delayed spells immunity may be applied between missile launch and hit - check immunity for that case
-    if (m_spellInfo->Speed && ((m_damage > 0 && unit->IsImmunedToDamage(m_caster, m_spellInfo)) || unit->IsImmunedToSchool(this) || unit->IsImmunedToSpell(m_spellInfo, this)))
+    if (m_spellInfo->Speed && ((m_damage > 0 && unit->IsImmunedToDamage(m_caster, m_spellInfo)) || unit->IsImmunedToSpell(m_spellInfo, this)))
     {
         return SPELL_MISS_IMMUNE;
     }
@@ -3658,7 +3672,8 @@ SpellCastResult Spell::prepare(SpellCastTargets const* targets, AuraEffect const
                     caster->AI()->OnSpellStart(GetSpellInfo());
 
         // set target for proper facing
-        if ((m_casttime || m_spellInfo->IsChanneled()) && !HasTriggeredCastFlag(TRIGGERED_IGNORE_SET_FACING))
+        // channels that allow actions must not lock target and facing, the creature keeps fighting while channeling
+        if ((m_casttime || m_spellInfo->IsChanneled()) && !m_spellInfo->IsActionAllowedChannel() && !HasTriggeredCastFlag(TRIGGERED_IGNORE_SET_FACING))
         {
             if (m_caster->IsCreature() && !m_caster->ToCreature()->IsInEvadeMode() &&
                     ((m_targets.GetObjectTarget() && m_caster != m_targets.GetObjectTarget()) || m_spellInfo->IsPositive()))
@@ -3951,6 +3966,44 @@ void Spell::_cast(bool skipCheck)
         }
     }
 
+    // CAST -> HIT -> FINISH ordering: fire CAST before handle_immediate so an aura
+    // applied during HIT (e.g. Arcane Potency from Clearcasting) isn't consumed by
+    // the same cast. Triggered spells skip this so periodic ticks (Blizzard etc.)
+    // don't burn cast-charge buffs.
+    if (m_originalCaster && !IsTriggered())
+    {
+        uint32 procAttacker = m_procAttacker;
+        if (!procAttacker)
+        {
+            bool IsPositive = m_spellInfo->IsPositive();
+            if (m_spellInfo->DmgClass == SPELL_DAMAGE_CLASS_MAGIC)
+            {
+                procAttacker = IsPositive ? PROC_FLAG_DONE_SPELL_MAGIC_DMG_CLASS_POS : PROC_FLAG_DONE_SPELL_MAGIC_DMG_CLASS_NEG;
+            }
+            else
+            {
+                procAttacker = IsPositive ? PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_POS : PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_NEG;
+            }
+        }
+
+        uint32 hitMask = PROC_HIT_NORMAL;
+
+        for (std::list<TargetInfo>::iterator ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
+        {
+            if (ihit->missCondition != SPELL_MISS_NONE)
+                continue;
+
+            if (!ihit->crit)
+                continue;
+
+            hitMask |= PROC_HIT_CRITICAL;
+            break;
+        }
+
+        Unit::ProcSkillsAndAuras(m_originalCaster, nullptr, procAttacker, PROC_FLAG_NONE, hitMask, 1, BASE_ATTACK, m_spellInfo, m_triggeredByAuraSpell.spellInfo,
+            m_triggeredByAuraSpell.effectIndex, this, nullptr, nullptr, PROC_SPELL_PHASE_CAST);
+    }
+
     // Okay, everything is prepared. Now we need to distinguish between immediate and evented delayed spells
     if ((m_spellInfo->Speed > 0.0f && !m_spellInfo->IsChanneled())/* xinef: we dont need this || m_spellInfo->Id == 14157*/)
     {
@@ -4007,46 +4060,6 @@ void Spell::_cast(bool skipCheck)
 
     if (modOwner)
         modOwner->SetSpellModTakingSpell(this, false);
-
-    // Handle procs on cast - only for non-triggered spells
-    // Triggered spells (from auras, items, etc.) should not fire CAST phase procs
-    // as they are not player-initiated casts. This prevents issues like Arcane Potency
-    // charges being consumed by periodic damage effects (e.g., Blizzard ticks).
-    // Must be called AFTER handle_immediate() so spell mods (like Missile Barrage's
-    // duration reduction) are applied before the aura is consumed by the proc.
-    if (m_originalCaster && !IsTriggered())
-    {
-        uint32 procAttacker = m_procAttacker;
-        if (!procAttacker)
-        {
-            bool IsPositive = m_spellInfo->IsPositive();
-            if (m_spellInfo->DmgClass == SPELL_DAMAGE_CLASS_MAGIC)
-            {
-                procAttacker = IsPositive ? PROC_FLAG_DONE_SPELL_MAGIC_DMG_CLASS_POS : PROC_FLAG_DONE_SPELL_MAGIC_DMG_CLASS_NEG;
-            }
-            else
-            {
-                procAttacker = IsPositive ? PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_POS : PROC_FLAG_DONE_SPELL_NONE_DMG_CLASS_NEG;
-            }
-        }
-
-        uint32 hitMask = PROC_HIT_NORMAL;
-
-        for (std::list<TargetInfo>::iterator ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
-        {
-            if (ihit->missCondition != SPELL_MISS_NONE)
-                continue;
-
-            if (!ihit->crit)
-                continue;
-
-            hitMask |= PROC_HIT_CRITICAL;
-            break;
-        }
-
-        Unit::ProcSkillsAndAuras(m_originalCaster, nullptr, procAttacker, PROC_FLAG_NONE, hitMask, 1, BASE_ATTACK, m_spellInfo, m_triggeredByAuraSpell.spellInfo,
-            m_triggeredByAuraSpell.effectIndex, this, nullptr, nullptr, PROC_SPELL_PHASE_CAST);
-    }
 
     if (std::vector<int32> const* spell_triggered = sSpellMgr->GetSpellLinked(m_spellInfo->Id))
     {
@@ -4470,6 +4483,11 @@ void Spell::finish(bool ok)
     if (m_spellState == SPELL_STATE_FINISHED)
         return;
     m_spellState = SPELL_STATE_FINISHED;
+
+    // FindMap() check: pending spell events are destroyed after the caster has left the map,
+    // where resolving a unit-summoned caster's owner through ObjectAccessor would assert
+    if (Player* modOwner = (m_caster && m_caster->FindMap()) ? m_caster->GetSpellModOwner() : nullptr)
+        modOwner->SetSpellModTakingSpell(this, false);
 
     if (m_spellInfo->IsChanneled())
         m_caster->UpdateInterruptMask();
@@ -7098,6 +7116,11 @@ SpellCastResult Spell::CheckRange(bool strict)
     {
         if (target != m_caster)
         {
+            // A vehicle passenger can neither turn nor move, and their stored position and
+            // orientation can be stale; never fail range or facing against the vehicle
+            // carrying them (e.g. Yogg-Saron's Constrictor Tentacle grab).
+            bool const targetIsVehicleBase = m_caster->GetVehicleBase() == target;
+
             // Xinef: Spells with 5yd range can hit target 9yd away?
             if (range_type == SPELL_RANGE_MELEE)
             {
@@ -7108,13 +7131,13 @@ SpellCastResult Spell::CheckRange(bool strict)
                 else
                     real_max_range -= 2 * MIN_MELEE_REACH;
 
-                if (!m_caster->IsWithinMeleeRange(target, std::max(real_max_range, 0.0f)))
+                if (!targetIsVehicleBase && !m_caster->IsWithinMeleeRange(target, std::max(real_max_range, 0.0f)))
                     return SPELL_FAILED_OUT_OF_RANGE;
             }
-            else if (!m_caster->IsWithinCombatRange(target, max_range))
+            else if (!targetIsVehicleBase && !m_caster->IsWithinCombatRange(target, max_range))
                 return SPELL_FAILED_OUT_OF_RANGE; //0x5A;
 
-            if (m_caster->IsPlayer() && (m_spellInfo->FacingCasterFlags & SPELL_FACING_FLAG_INFRONT) && !m_caster->HasInArc(static_cast<float>(M_PI), target) && !m_caster->IsWithinBoundaryRadius(target))
+            if (!targetIsVehicleBase && m_caster->IsPlayer() && (m_spellInfo->FacingCasterFlags & SPELL_FACING_FLAG_INFRONT) && !m_caster->HasInArc(static_cast<float>(M_PI), target) && !m_caster->IsWithinBoundaryRadius(target))
                 return SPELL_FAILED_UNIT_NOT_INFRONT;
         }
 
@@ -9104,7 +9127,7 @@ namespace Acore
 
     bool WorldObjectSpellNearbyTargetCheck::operator()(WorldObject* target)
     {
-        float dist = target->GetDistance(*_position);
+        float dist = target->GetDistance2d(_position->GetPositionX(), _position->GetPositionY());
         if (dist < _range && WorldObjectSpellTargetCheck::operator ()(target))
         {
             _range = dist;
